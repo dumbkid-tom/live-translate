@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - VERTEX_PROJECT=${VERTEX_PROJECT:-winter-runway-506}
+      - VERTEX_LOCATION=${VERTEX_LOCATION:-us-central1}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-gemini-3.5-live-translate-preview}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      - VERTEX_ACCESS_TOKEN=${VERTEX_ACCESS_TOKEN}
+    volumes:
+      - .:/app

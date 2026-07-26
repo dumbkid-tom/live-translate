@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: live-translate-config
+  labels:
+    app: live-translate
+data:
+  VERTEX_PROJECT: "winter-runway-506"
+  VERTEX_LOCATION: "us-central1"
+  DEFAULT_MODEL: "gemini-3.5-live-translate-preview"
+  HOST: "0.0.0.0"
+  PORT: "8000"

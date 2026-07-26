@@ -17,6 +17,9 @@ def test_health_check_endpoint():
     assert data["status"] == "healthy"
     assert data["provider"] == "vertex_ai"
     assert data["model"] == "gemini-3.5-live-translate-preview"
+    assert data["vertex_project"] == "winter-runway-506"
+    assert data["vertex_location"] == "us-central1"
+    assert "has_credentials" in data
 
 def test_index_route():
     response = client.get("/")

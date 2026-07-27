@@ -1,6 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   // DOM Elements
+  const headphoneBanner = document.getElementById('headphone-banner');
+  const dismissBannerBtn = document.getElementById('dismiss-banner-btn');
+  const translationModeSelect = document.getElementById('translation-mode-select');
   const targetLanguageSelect = document.getElementById('target-language');
+  const sourceLanguageSelect = document.getElementById('source-language');
   const modeAudioBtn = document.getElementById('mode-audio');
   const modeTextBtn = document.getElementById('mode-text');
   const toggleBtn = document.getElementById('toggle-btn');
@@ -9,21 +13,99 @@ document.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('audio-visualizer');
   const canvasCtx = canvas.getContext('2d');
   const visualizerOverlay = document.getElementById('visualizer-overlay');
+  
+  const micSelect = document.getElementById('mic-select');
+  const volumeSlider = document.getElementById('volume-slider');
+  const volumeVal = document.getElementById('volume-val');
+  const silenceSlider = document.getElementById('silence-slider');
+  const silenceVal = document.getElementById('silence-val');
+  const echoTargetGroup = document.getElementById('echo-target-group');
+  const echoTargetCheckbox = document.getElementById('echo-target-checkbox');
+  const vadSilenceGroup = document.getElementById('vad-silence-group');
+
+  const sourceTranscriptContainer = document.getElementById('source-transcript-container');
+  const sourceEmptyState = document.getElementById('source-empty-state');
   const transcriptContainer = document.getElementById('transcript-container');
   const emptyState = document.getElementById('empty-state');
+
   const clearBtn = document.getElementById('clear-btn');
   const exportJsonBtn = document.getElementById('export-json-btn');
   const exportTxtBtn = document.getElementById('export-txt-btn');
 
   // Application State
-  let currentMode = 'audio'; // 'audio' or 'text'
+  let currentMode = 'audio';
+  let activeTranslationMode = 'simultaneous';
   let isRunning = false;
-  let ws = null;
-  let audioRecorder = null;
+  let geminiLiveClient = null;
+  let audioStreamer = null;
   let audioPlayer = null;
+
   let transcriptEntries = [];
-  let currentTurnText = '';
-  let currentTurnElement = null;
+  let currentTranslationText = '';
+  let currentTranslationElement = null;
+  let currentSourceText = '';
+  let currentSourceElement = null;
+
+  // Banner Dismissal
+  if (dismissBannerBtn && headphoneBanner) {
+    dismissBannerBtn.addEventListener('click', () => {
+      headphoneBanner.style.display = 'none';
+    });
+  }
+
+  // Translation Mode Change Handler
+  function updateEngineModeUI() {
+    const mode = translationModeSelect ? translationModeSelect.value : 'simultaneous';
+    if (mode === 'simultaneous') {
+      if (vadSilenceGroup) vadSilenceGroup.style.display = 'none';
+      if (echoTargetGroup) echoTargetGroup.style.display = 'block';
+    } else {
+      if (vadSilenceGroup) vadSilenceGroup.style.display = 'block';
+      if (echoTargetGroup) echoTargetGroup.style.display = 'none';
+    }
+  }
+
+  if (translationModeSelect) {
+    translationModeSelect.addEventListener('change', updateEngineModeUI);
+    updateEngineModeUI();
+  }
+
+  // Populate Microphones
+  async function populateMicrophones() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput');
+      if (micSelect && audioInputs.length > 0) {
+        micSelect.innerHTML = '<option value="">Default Microphone</option>';
+        audioInputs.forEach((dev, idx) => {
+          const opt = document.createElement('option');
+          opt.value = dev.deviceId;
+          opt.textContent = dev.label || `Microphone ${idx + 1}`;
+          micSelect.appendChild(opt);
+        });
+      }
+    } catch (e) {
+      console.warn("Could not enumerate audio devices:", e);
+    }
+  }
+  populateMicrophones();
+
+  // Volume Slider
+  if (volumeSlider) {
+    volumeSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      if (volumeVal) volumeVal.textContent = `${Math.round(val * 100)}%`;
+      if (audioPlayer) audioPlayer.setVolume(val);
+    });
+  }
+
+  // Silence Threshold Slider
+  if (silenceSlider) {
+    silenceSlider.addEventListener('input', (e) => {
+      if (silenceVal) silenceVal.textContent = `${e.target.value}ms`;
+    });
+  }
 
   // Initialize Audio Player
   audioPlayer = new AudioPlayer();
@@ -54,45 +136,71 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   async function startTranslation() {
-    updateStatus('connecting', 'Connecting...');
+    updateStatus('connecting', 'Minting token...');
     try {
+      // Pre-initialize Audio Context on user gesture
+      if (audioPlayer) {
+        await audioPlayer.init();
+      }
+
       const targetLang = targetLanguageSelect.value;
+      const sourceLang = sourceLanguageSelect ? sourceLanguageSelect.value : null;
+      const trMode = translationModeSelect ? translationModeSelect.value : 'simultaneous';
+      const echoTarget = echoTargetCheckbox ? echoTargetCheckbox.checked : false;
+      const silenceDuration = silenceSlider ? parseInt(silenceSlider.value, 10) : 600;
 
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/translate?target_language=${encodeURIComponent(targetLang)}&mode=${currentMode}`;
+      // Step 1: Request Ephemeral Token from backend
+      const tokenResp = await fetch('/api/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_language: targetLang,
+          mode: currentMode,
+          source_language: sourceLang,
+          translation_mode: trMode,
+          echo_target_language: echoTarget,
+          silence_duration_ms: silenceDuration
+        })
+      });
 
-      ws = new WebSocket(wsUrl);
+      if (!tokenResp.ok) {
+        const errJson = await tokenResp.json().catch(() => ({ detail: tokenResp.statusText }));
+        throw new Error(errJson.detail || 'Failed to mint ephemeral token');
+      }
 
-      ws.onopen = () => {
-        console.log("WebSocket connected to backend proxy.");
-      };
+      const tokenData = await tokenResp.json();
+      console.log("Token minted successfully.");
+      activeTranslationMode = tokenData.translation_mode || trMode;
 
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        handleServerMessage(msg);
-      };
+      updateStatus('connecting', 'Connecting Gemini WS...');
 
-      ws.onerror = (err) => {
-        console.error("WebSocket error:", err);
-        updateStatus('error', 'Connection Error');
-        stopTranslation();
-      };
-
-      ws.onclose = () => {
-        if (isRunning) {
-          updateStatus('idle', 'Disconnected');
-          stopTranslation();
+      // Step 2: Direct WebSocket connection to Gemini API
+      geminiLiveClient = new GeminiLiveClient({
+        wsEndpoint: tokenData.ws_endpoint,
+        setupPayload: { setup: tokenData.setup },
+        tokenExpiresAt: tokenData.expires_at,
+        onEvent: handleGeminiEvent,
+        onError: (err) => {
+          console.error("Gemini Live Client error:", err);
+          updateStatus('error', 'Connection Error');
+        },
+        onClose: () => {
+          if (isRunning) {
+            updateStatus('idle', 'Disconnected');
+            stopTranslation();
+          }
         }
-      };
+      });
 
-      // Start Audio Recorder
-      audioRecorder = new AudioRecorder(
+      // Connect and wait for SETUP_COMPLETE
+      await geminiLiveClient.connect();
+      console.log("Gemini Live Client setup complete!");
+
+      // Step 3: Start microphone audio capture worklet
+      audioStreamer = new AudioStreamer(
         (pcmBase64) => {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              type: 'audio_chunk',
-              data: pcmBase64
-            }));
+          if (geminiLiveClient) {
+            geminiLiveClient.sendAudio(pcmBase64);
           }
         },
         (analyserData) => {
@@ -100,14 +208,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       );
 
-      await audioRecorder.start();
+      const selectedMic = micSelect ? micSelect.value : null;
+      await audioStreamer.start(selectedMic);
 
       isRunning = true;
       updateUIForRunningState(true);
-      updateStatus('live', 'Live Translating');
+      updateStatus('live', activeTranslationMode === 'simultaneous' ? 'Live Translate' : 'Turn-based Translate');
     } catch (err) {
       console.error("Failed to start translation:", err);
-      updateStatus('error', 'Mic / Connection Error');
+      alert(`Error starting translation: ${err.message}`);
+      updateStatus('error', 'Connection Error');
       stopTranslation();
     }
   }
@@ -117,17 +227,14 @@ document.addEventListener('DOMContentLoaded', () => {
     updateUIForRunningState(false);
     updateStatus('idle', 'Ready');
 
-    if (audioRecorder) {
-      audioRecorder.stop();
-      audioRecorder = null;
+    if (audioStreamer) {
+      audioStreamer.stop();
+      audioStreamer = null;
     }
 
-    if (ws) {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'stop' }));
-        ws.close();
-      }
-      ws = null;
+    if (geminiLiveClient) {
+      geminiLiveClient.disconnect();
+      geminiLiveClient = null;
     }
 
     if (audioPlayer) {
@@ -138,82 +245,116 @@ document.addEventListener('DOMContentLoaded', () => {
     finalizeCurrentTurn();
   }
 
-  function handleServerMessage(msg) {
-    if (msg.type === 'connected') {
-      console.log(`Connected to Gemini Live API (${msg.model}).`);
-    } else if (msg.type === 'text') {
-      appendTranscriptText(msg.text);
-    } else if (msg.type === 'audio') {
+  function handleGeminiEvent(ev) {
+    if (ev.type === 'text') {
+      appendTranslationText(ev.text);
+    } else if (ev.type === 'source_text') {
+      appendSourceText(ev.text);
+    } else if (ev.type === 'audio') {
       if (currentMode === 'audio' && audioPlayer) {
-        audioPlayer.playChunk(msg.data);
+        audioPlayer.playChunk(ev.data);
       }
-    } else if (msg.type === 'interrupted') {
-      if (audioPlayer) {
+    } else if (ev.type === 'interrupted') {
+      if (activeTranslationMode === 'turn_based' && audioPlayer) {
         audioPlayer.clear();
       }
-    } else if (msg.type === 'turn_complete') {
-      finalizeCurrentTurn();
-    } else if (msg.type === 'error') {
-      alert(`Server Error: ${msg.message}`);
-      stopTranslation();
+    } else if (ev.type === 'turn_complete') {
+      if (activeTranslationMode === 'turn_based') {
+        finalizeCurrentTurn();
+      }
+    } else if (ev.type === 'token_expiring_soon') {
+      console.warn("Ephemeral token expiring soon.");
     }
   }
 
-  // Transcript Management
-  function appendTranscriptText(textChunk) {
-    if (emptyState) {
-      emptyState.style.display = 'none';
-    }
+  // Translation Transcript
+  function appendTranslationText(textChunk) {
+    if (emptyState) emptyState.style.display = 'none';
 
-    if (!currentTurnElement) {
-      const now = new Date();
-      const timeFormatted = now.toLocaleTimeString();
+    if (!currentTranslationElement) {
+      const timeFormatted = new Date().toLocaleTimeString();
+      currentTranslationElement = document.createElement('div');
+      currentTranslationElement.className = 'transcript-entry';
 
-      currentTurnElement = document.createElement('div');
-      currentTurnElement.className = 'transcript-entry';
-      
       const meta = document.createElement('div');
       meta.className = 'entry-meta';
-      meta.innerHTML = `<span>Translator &bull; ${targetLanguageSelect.value}</span><span>${timeFormatted}</span>`;
-      
+      meta.innerHTML = `<span>Translation &bull; ${targetLanguageSelect.value}</span><span>${timeFormatted}</span>`;
+
       const textDiv = document.createElement('div');
       textDiv.className = 'entry-text';
       textDiv.textContent = '';
-      
-      currentTurnElement.appendChild(meta);
-      currentTurnElement.appendChild(textDiv);
-      transcriptContainer.appendChild(currentTurnElement);
+
+      currentTranslationElement.appendChild(meta);
+      currentTranslationElement.appendChild(textDiv);
+      transcriptContainer.appendChild(currentTranslationElement);
     }
 
-    const textDiv = currentTurnElement.querySelector('.entry-text');
-    currentTurnText += textChunk;
-    textDiv.textContent = currentTurnText;
+    const textDiv = currentTranslationElement.querySelector('.entry-text');
+    currentTranslationText += textChunk;
+    textDiv.textContent = currentTranslationText;
     transcriptContainer.scrollTop = transcriptContainer.scrollHeight;
   }
 
+  // Source Speech Transcript
+  function appendSourceText(textChunk) {
+    if (sourceEmptyState) sourceEmptyState.style.display = 'none';
+
+    if (!currentSourceElement) {
+      const timeFormatted = new Date().toLocaleTimeString();
+      currentSourceElement = document.createElement('div');
+      currentSourceElement.className = 'transcript-entry entry-source';
+
+      const meta = document.createElement('div');
+      meta.className = 'entry-meta';
+      meta.innerHTML = `<span>Original Speech</span><span>${timeFormatted}</span>`;
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'entry-text';
+      textDiv.textContent = '';
+
+      currentSourceElement.appendChild(meta);
+      currentSourceElement.appendChild(textDiv);
+      sourceTranscriptContainer.appendChild(currentSourceElement);
+    }
+
+    const textDiv = currentSourceElement.querySelector('.entry-text');
+    currentSourceText += textChunk;
+    textDiv.textContent = currentSourceText;
+    sourceTranscriptContainer.scrollTop = sourceTranscriptContainer.scrollHeight;
+  }
+
   function finalizeCurrentTurn() {
-    if (currentTurnText.trim().length > 0) {
+    if (currentTranslationText.trim().length > 0 || currentSourceText.trim().length > 0) {
       const now = new Date();
       transcriptEntries.push({
         timestamp: now.toISOString(),
         timeFormatted: now.toLocaleTimeString(),
         targetLanguage: targetLanguageSelect.value,
-        mode: currentMode,
-        text: currentTurnText.trim()
+        sourceText: currentSourceText.trim(),
+        translationText: currentTranslationText.trim()
       });
     }
-    currentTurnText = '';
-    currentTurnElement = null;
+    currentTranslationText = '';
+    currentTranslationElement = null;
+    currentSourceText = '';
+    currentSourceElement = null;
   }
 
   // Clear Transcript
   clearBtn.addEventListener('click', () => {
     transcriptEntries = [];
-    currentTurnText = '';
-    currentTurnElement = null;
+    currentTranslationText = '';
+    currentTranslationElement = null;
+    currentSourceText = '';
+    currentSourceElement = null;
+
     transcriptContainer.innerHTML = '';
     transcriptContainer.appendChild(emptyState);
-    emptyState.style.display = 'flex';
+    emptyState.style.display = 'block';
+
+    sourceTranscriptContainer.innerHTML = '';
+    sourceTranscriptContainer.appendChild(sourceEmptyState);
+    sourceEmptyState.style.display = 'block';
   });
 
   // Export JSON Transcript
@@ -238,8 +379,11 @@ document.addEventListener('DOMContentLoaded', () => {
     mdContent += `**Date:** ${new Date().toLocaleString()}\n`;
     mdContent += `**Target Language:** ${targetLanguageSelect.value}\n\n---\n\n`;
 
-    transcriptEntries.forEach((entry, idx) => {
-      mdContent += `### [${entry.timeFormatted}] ${entry.targetLanguage}\n${entry.text}\n\n`;
+    transcriptEntries.forEach((entry) => {
+      mdContent += `### [${entry.timeFormatted}]\n`;
+      if (entry.sourceText) mdContent += `**Original Speech:** ${entry.sourceText}\n\n`;
+      if (entry.translationText) mdContent += `**Translation (${entry.targetLanguage}):** ${entry.translationText}\n\n`;
+      mdContent += `---\n\n`;
     });
 
     const dataStr = "data:text/markdown;charset=utf-8," + encodeURIComponent(mdContent);
@@ -257,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Visualizer Rendering
   function drawVisualizer(dataArray) {
-    visualizerOverlay.classList.add('hidden');
+    if (visualizerOverlay) visualizerOverlay.classList.add('hidden');
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
     const barWidth = (canvas.width / dataArray.length) * 2.5;
@@ -276,7 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function clearVisualizer() {
-    visualizerOverlay.classList.remove('hidden');
+    if (visualizerOverlay) visualizerOverlay.classList.remove('hidden');
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
@@ -293,7 +437,11 @@ document.addEventListener('DOMContentLoaded', () => {
         </span>
         <span>Stop Translation</span>
       `;
+      if (translationModeSelect) translationModeSelect.disabled = true;
       targetLanguageSelect.disabled = true;
+      if (sourceLanguageSelect) sourceLanguageSelect.disabled = true;
+      if (silenceSlider) silenceSlider.disabled = true;
+      if (echoTargetCheckbox) echoTargetCheckbox.disabled = true;
       modeAudioBtn.disabled = true;
       modeTextBtn.disabled = true;
     } else {
@@ -307,7 +455,11 @@ document.addEventListener('DOMContentLoaded', () => {
         </span>
         <span>Start Translation</span>
       `;
+      if (translationModeSelect) translationModeSelect.disabled = false;
       targetLanguageSelect.disabled = false;
+      if (sourceLanguageSelect) sourceLanguageSelect.disabled = false;
+      if (silenceSlider) silenceSlider.disabled = false;
+      if (echoTargetCheckbox) echoTargetCheckbox.disabled = false;
       modeAudioBtn.disabled = false;
       modeTextBtn.disabled = false;
     }

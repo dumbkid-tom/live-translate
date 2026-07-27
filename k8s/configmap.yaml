@@ -5,6 +5,6 @@ metadata:
   labels:
     app: live-translate
 data:
-  DEFAULT_MODEL: "gemini-2.0-flash-exp"
+  DEFAULT_MODEL: "gemini-3.1-flash-live-preview"
   HOST: "0.0.0.0"
   PORT: "8000"

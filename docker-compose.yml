@@ -7,6 +7,6 @@ services:
       - "8000:8000"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - DEFAULT_MODEL=${DEFAULT_MODEL:-gemini-2.0-flash-exp}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-gemini-3.1-flash-live-preview}
     volumes:
       - .:/app

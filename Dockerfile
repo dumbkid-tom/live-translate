@@ -20,7 +20,7 @@ EXPOSE 8000
 
 ENV HOST=0.0.0.0
 ENV PORT=8000
-ENV DEFAULT_MODEL=gemini-2.0-flash-exp
+ENV DEFAULT_MODEL=gemini-3.1-flash-live-preview
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8000/api/health || exit 1

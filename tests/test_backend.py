@@ -1,13 +1,13 @@
 import sys
 import os
 import pytest
+from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
-from fastapi.websockets import WebSocketDisconnect
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from backend.main import app
-from backend.gemini_live import GeminiLiveBridge
+from backend.main import app, ip_request_history
+from backend.gemini_live import build_interpreter_prompt, build_live_session_config, TokenService, resolve_language_code
 from backend.config import settings
 
 client = TestClient(app)
@@ -17,89 +17,196 @@ def test_health_check_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
-    assert data["provider"] == "gemini_api"
-    assert data["endpoint"] == "https://generativelanguage.googleapis.com"
+    assert data["provider"] == "gemini_live_ephemeral"
+    assert "BidiGenerateContentConstrained" in data["endpoint"]
     assert "has_api_key" in data
+    assert data["token_uses"] == 1
+    assert data["token_ttl_minutes"] == 30
 
 def test_index_route():
     response = client.get("/")
     assert response.status_code == 200
 
-def test_gemini_bridge_initial_setup(monkeypatch):
-    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
-    bridge = GeminiLiveBridge(target_language="Spanish", output_mode="audio")
-    setup_msg = bridge.build_initial_setup_message()
-    
-    assert "AUDIO" in setup_msg["setup"]["generationConfig"]["responseModalities"]
-    assert "Spanish" in setup_msg["setup"]["systemInstruction"]["parts"][0]["text"]
+def test_build_interpreter_prompt():
+    prompt = build_interpreter_prompt("Spanish", "English")
+    assert "Spanish" in prompt
+    assert "from English" in prompt
 
-def test_gemini_bridge_api_key_details(monkeypatch):
-    monkeypatch.setattr(settings, "gemini_api_key", "AIzaSyTestApiKey12345")
-    bridge = GeminiLiveBridge(
-        target_language="French",
-        output_mode="audio"
-    )
-    ws_url, headers, model_name = bridge.get_connection_details()
-    
-    assert "generativelanguage.googleapis.com" in ws_url
-    assert "key=AIzaSyTestApiKey12345" in ws_url
-    assert headers.get("x-goog-api-key") == "AIzaSyTestApiKey12345"
-    assert "Authorization" not in headers
-    assert model_name.startswith("models/")
+    prompt_no_src = build_interpreter_prompt("Japanese")
+    assert "Japanese" in prompt_no_src
+    assert "from " not in prompt_no_src
 
-def test_gemini_bridge_url_encoding(monkeypatch):
-    key_with_special_chars = "AIzaSyTest+Key/123="
-    monkeypatch.setattr(settings, "gemini_api_key", key_with_special_chars)
-    bridge = GeminiLiveBridge(
-        target_language="French",
-        output_mode="audio"
-    )
-    ws_url, headers, model_name = bridge.get_connection_details()
-    
-    assert "key=AIzaSyTest%2BKey%2F123%3D" in ws_url
-    assert headers.get("x-goog-api-key") == key_with_special_chars
+def test_resolve_language_code():
+    assert resolve_language_code("Spanish") == "es"
+    assert resolve_language_code("es") == "es"
+    assert resolve_language_code("French") == "fr"
+    assert resolve_language_code("ja") == "ja"
+    assert resolve_language_code("zh-CN") == "zh-cn"
+    assert resolve_language_code("nl") == "nl"
+    assert resolve_language_code("UnknownLang") == "en"
+    assert resolve_language_code("12345") == "en"
+    assert resolve_language_code(None) == "en"
+    assert resolve_language_code("") == "en"
 
-def test_gemini_bridge_missing_api_key(monkeypatch):
+def test_build_live_session_config():
+    # Simultaneous mode (default)
+    cfg = build_live_session_config("French", translation_mode="simultaneous")
+    setup = cfg["setup"]
+    assert setup["model"] == "models/gemini-3.5-live-translate-preview"
+    assert setup["generationConfig"]["responseModalities"] == ["AUDIO"]
+    assert setup["generationConfig"]["translationConfig"]["targetLanguageCode"] == "fr"
+    assert "realtimeInputConfig" not in setup
+
+    # Turn-based fallback mode
+    cfg_tb = build_live_session_config("French", "audio", "gemini-3.1-flash-live-preview", silence_duration_ms=600, translation_mode="turn_based")
+    setup_tb = cfg_tb["setup"]
+    assert setup_tb["model"] == "models/gemini-3.1-flash-live-preview"
+    assert setup_tb["realtimeInputConfig"]["activityHandling"] == "NO_INTERRUPTION"
+    assert setup_tb["realtimeInputConfig"]["automaticActivityDetection"]["silenceDurationMs"] == 600
+    assert setup_tb["realtimeInputConfig"]["automaticActivityDetection"]["endOfSpeechSensitivity"] == "END_SENSITIVITY_HIGH"
+
+def test_token_service_missing_api_key(monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "")
-    bridge = GeminiLiveBridge(target_language="English")
+    service = TokenService()
     with pytest.raises(ValueError, match="GEMINI_API_KEY environment variable is not set"):
-        bridge.get_connection_details()
+        service.create("Spanish")
 
-def test_websocket_missing_api_key(monkeypatch):
-    monkeypatch.setattr(settings, "gemini_api_key", "")
-    with client.websocket_connect("/ws/translate") as websocket:
-        data = websocket.receive_json()
-        assert data["type"] == "error"
-        assert data["message"] == "GEMINI_API_KEY environment variable is not set."
-        with pytest.raises(WebSocketDisconnect) as exc_info:
-            websocket.receive_json()
-        assert exc_info.value.code == 1008
+def test_token_service_create_mocked(monkeypatch):
+    monkeypatch.setattr(settings, "gemini_api_key", "fake-api-key")
 
-def test_gemini_bridge_custom_model_details(monkeypatch):
-    monkeypatch.setattr(settings, "gemini_api_key", "AIzaSyTestApiKey12345")
-    bridge = GeminiLiveBridge(
-        target_language="German",
-        output_mode="audio",
-        model="gemini-2.0-flash-exp"
-    )
-    ws_url, headers, model_name = bridge.get_connection_details()
-    
-    assert model_name == "models/gemini-2.0-flash-exp"
+    mock_token_obj = MagicMock()
+    mock_token_obj.name = "auth_tokens/mock_123456"
 
-def test_gemini_bridge_realtime_audio_chunk():
-    bridge = GeminiLiveBridge(target_language="English", output_mode="audio")
-    dummy_b64 = "AAAA////"
-    chunk = bridge.build_realtime_audio_chunk(dummy_b64)
-    
-    assert chunk["realtimeInput"]["audio"]["mimeType"] == "audio/pcm;rate=16000"
-    assert chunk["realtimeInput"]["audio"]["data"] == dummy_b64
+    mock_genai_client = MagicMock()
+    mock_genai_client.auth_tokens.create.return_value = mock_token_obj
 
-def test_gemini_bridge_genai_connect_config(monkeypatch):
-    monkeypatch.setattr(settings, "gemini_api_key", "test-key-123")
-    bridge = GeminiLiveBridge(target_language="Japanese", output_mode="audio")
-    config = bridge.build_live_connect_config()
-    
-    assert config.response_modalities == ["AUDIO"]
-    assert config.input_audio_transcription is not None
-    assert config.output_audio_transcription is not None
-    assert "Japanese" in config.system_instruction.parts[0].text
+    with patch("backend.gemini_live.genai.Client", return_value=mock_genai_client):
+        service = TokenService()
+
+        # Simultaneous token
+        result = service.create("German", "audio", translation_mode="simultaneous")
+        assert result["token"] == "auth_tokens/mock_123456"
+        assert "access_token=auth_tokens/mock_123456" in result["ws_endpoint"]
+        assert result["model"] == "models/gemini-3.5-live-translate-preview"
+        assert result["translation_mode"] == "simultaneous"
+        assert result["target_language_code"] == "de"
+
+        # Turn-based token
+        result_tb = service.create("German", "audio", model="gemini-3.1-flash-live-preview", translation_mode="turn_based")
+        assert result_tb["model"] == "models/gemini-3.1-flash-live-preview"
+        assert result_tb["translation_mode"] == "turn_based"
+        assert result_tb["setup"]["realtimeInputConfig"]["activityHandling"] == "NO_INTERRUPTION"
+
+def test_api_token_endpoint_success(monkeypatch):
+    monkeypatch.setattr(settings, "gemini_api_key", "fake-api-key")
+
+    mock_token_obj = MagicMock()
+    mock_token_obj.name = "auth_tokens/mock_7890"
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.auth_tokens.create.return_value = mock_token_obj
+
+    ip_request_history.clear()
+
+    with patch("backend.gemini_live.genai.Client", return_value=mock_genai_client):
+        response = client.post("/api/token", json={
+            "target_language": "Italian",
+            "mode": "audio",
+            "translation_mode": "turn_based",
+            "silence_duration_ms": 600
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["token"] == "auth_tokens/mock_7890"
+        assert "ws_endpoint" in data
+        assert "setup" in data
+        assert data["translation_mode"] == "turn_based"
+        assert data["target_language_code"] == "it"
+        assert data["setup"]["realtimeInputConfig"]["automaticActivityDetection"]["silenceDurationMs"] == 600
+
+def test_api_token_endpoint_validation_bounds(monkeypatch):
+    monkeypatch.setattr(settings, "gemini_api_key", "fake-api-key")
+
+    ip_request_history.clear()
+
+    # silence_duration_ms too low (< 100)
+    response = client.post("/api/token", json={"silence_duration_ms": 50})
+    assert response.status_code == 422
+
+    # silence_duration_ms too high (> 2000)
+    response = client.post("/api/token", json={"silence_duration_ms": 3000})
+    assert response.status_code == 422
+
+def test_api_token_endpoint_translation_mode_validation(monkeypatch):
+    monkeypatch.setattr(settings, "gemini_api_key", "fake-api-key")
+
+    mock_token_obj = MagicMock()
+    mock_token_obj.name = "auth_tokens/mock_tm_val"
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.auth_tokens.create.return_value = mock_token_obj
+
+    ip_request_history.clear()
+
+    # Invalid translation mode
+    response = client.post("/api/token", json={"translation_mode": "invalid_mode"})
+    assert response.status_code == 422
+
+    # Valid translation modes
+    with patch("backend.gemini_live.genai.Client", return_value=mock_genai_client):
+        resp1 = client.post("/api/token", json={"translation_mode": "simultaneous"})
+        assert resp1.status_code == 200
+        assert resp1.json()["translation_mode"] == "simultaneous"
+
+        resp2 = client.post("/api/token", json={"translation_mode": "turn_based"})
+        assert resp2.status_code == 200
+        assert resp2.json()["translation_mode"] == "turn_based"
+
+def test_token_service_locks_constraints_structure(monkeypatch):
+    monkeypatch.setattr(settings, "gemini_api_key", "fake-api-key")
+    monkeypatch.setattr(settings, "lock_token_constraints", True)
+
+    mock_token_obj = MagicMock()
+    mock_token_obj.name = "auth_tokens/mock_constraints_check"
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.auth_tokens.create.return_value = mock_token_obj
+
+    with patch("backend.gemini_live.genai.Client", return_value=mock_genai_client):
+        service = TokenService()
+        result = service.create("German", "audio", translation_mode="simultaneous", echo_target_language=True)
+
+        call_args = mock_genai_client.auth_tokens.create.call_args
+        assert call_args is not None
+        config_arg = call_args.kwargs.get("config")
+        assert config_arg is not None
+
+        # Check live_connect_constraints in CreateAuthTokenConfig
+        constraints = config_arg.live_connect_constraints
+        assert constraints is not None
+        assert constraints.model == "models/gemini-3.5-live-translate-preview"
+        assert constraints.config.translation_config.target_language_code == "de"
+        assert constraints.config.translation_config.echo_target_language is True
+
+def test_api_token_endpoint_rate_limit(monkeypatch):
+    monkeypatch.setattr(settings, "gemini_api_key", "fake-api-key")
+    monkeypatch.setattr(settings, "token_rate_limit_per_minute", 2)
+
+    mock_token_obj = MagicMock()
+    mock_token_obj.name = "auth_tokens/mock_rl"
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.auth_tokens.create.return_value = mock_token_obj
+
+    ip_request_history.clear()
+
+    with patch("backend.gemini_live.genai.Client", return_value=mock_genai_client):
+        r1 = client.post("/api/token", json={"target_language": "Spanish"})
+        assert r1.status_code == 200
+
+        r2 = client.post("/api/token", json={"target_language": "Spanish"})
+        assert r2.status_code == 200
+
+        r3 = client.post("/api/token", json={"target_language": "Spanish"})
+        assert r3.status_code == 429
+        assert "Rate limit exceeded" in r3.json()["detail"]

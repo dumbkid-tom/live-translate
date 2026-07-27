@@ -14,7 +14,7 @@ from backend.gemini_live import GeminiLiveBridge
 logger = logging.getLogger("main")
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="Live Translate API (Vertex AI)", version="1.0.0")
+app = FastAPI(title="Live Translate API (Gemini API)", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,14 +26,13 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health_check():
-    has_creds = bool(settings.gemini_api_key or settings.access_token or settings.google_application_credentials)
+    has_api_key = bool(settings.gemini_api_key)
     return {
         "status": "healthy",
-        "provider": "vertex_ai",
+        "provider": "gemini_api",
+        "endpoint": "https://generativelanguage.googleapis.com",
         "model": settings.default_model,
-        "vertex_project": settings.vertex_project,
-        "vertex_location": settings.vertex_location,
-        "has_credentials": has_creds
+        "has_api_key": has_api_key
     }
 
 @app.websocket("/ws/translate")
@@ -41,30 +40,26 @@ async def websocket_translate(
     websocket: WebSocket,
     target_language: str = Query("English"),
     mode: str = Query("audio"),
-    project: str = Query(None),
-    location: str = Query(None),
-    custom_token: str = Query(None)
+    api_key: str = Query(None)
 ):
     await websocket.accept()
 
     bridge = GeminiLiveBridge(
         target_language=target_language,
         output_mode=mode,
-        token_or_key=custom_token,
-        project=project,
-        location=location
+        api_key=api_key
     )
 
     try:
         ws_url, headers, model_name = bridge.get_connection_details()
-        logger.info(f"Connecting to Vertex AI WSS Endpoint: {ws_url}")
+        logger.info(f"Connecting to Gemini API WSS Endpoint: {ws_url}")
 
         connect_kwargs = {}
         if headers:
             connect_kwargs["additional_headers"] = headers
 
         async with websockets.connect(ws_url, **connect_kwargs) as gemini_ws:
-            # Send setup frame to Vertex AI
+            # Send setup frame to Gemini API
             setup_payload = bridge.build_initial_setup_message(model_name=model_name)
             await gemini_ws.send(json.dumps(setup_payload))
 
@@ -74,9 +69,7 @@ async def websocket_translate(
                 "target_language": target_language,
                 "mode": mode,
                 "model": model_name,
-                "provider": "vertex_ai",
-                "project": bridge.project,
-                "location": bridge.location
+                "provider": "gemini_api"
             })
 
             async def client_to_gemini():
@@ -125,7 +118,7 @@ async def websocket_translate(
                             await websocket.send_json({"type": "turn_complete"})
 
                 except Exception as e:
-                    logger.error(f"Error reading Vertex AI WSS: {e}")
+                    logger.error(f"Error reading Gemini API WSS: {e}")
 
             await asyncio.gather(client_to_gemini(), gemini_to_client(), return_exceptions=True)
 
@@ -148,4 +141,4 @@ async def read_index():
     if os.path.exists(index_path):
         with open(index_path, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
-    return JSONResponse(content={"status": "Live Translate Service (Vertex AI) is active"})
+    return JSONResponse(content={"status": "Live Translate Service (Gemini API) is active"})

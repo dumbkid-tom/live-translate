@@ -15,68 +15,46 @@ def test_health_check_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
-    assert data["provider"] == "vertex_ai"
-    assert data["model"] == "gemini-3.5-live-translate-preview"
-    assert data["vertex_project"] == "winter-runway-506"
-    assert data["vertex_location"] == "us-central1"
-    assert "has_credentials" in data
+    assert data["provider"] == "gemini_api"
+    assert data["endpoint"] == "https://generativelanguage.googleapis.com"
+    assert "has_api_key" in data
 
 def test_index_route():
     response = client.get("/")
     assert response.status_code == 200
 
 def test_gemini_bridge_initial_setup():
-    bridge = GeminiLiveBridge(target_language="Spanish", output_mode="audio", token_or_key="ya29.test")
+    bridge = GeminiLiveBridge(target_language="Spanish", output_mode="audio", api_key="test-key")
     setup_msg = bridge.build_initial_setup_message()
     
     assert "AUDIO" in setup_msg["setup"]["generationConfig"]["responseModalities"]
     assert "TEXT" in setup_msg["setup"]["generationConfig"]["responseModalities"]
     assert "Spanish" in setup_msg["setup"]["systemInstruction"]["parts"][0]["text"]
 
-def test_gemini_bridge_vertex_details():
-    bridge = GeminiLiveBridge(
-        target_language="Japanese",
-        output_mode="text",
-        token_or_key="ya29.test-token",
-        project="winter-runway-506",
-        location="us-central1"
-    )
-    ws_url, headers, model_name = bridge.get_connection_details()
-    
-    assert "us-central1-aiplatform.googleapis.com" in ws_url
-    assert "access_token=ya29.test-token" in ws_url
-    assert headers.get("Authorization") == "Bearer ya29.test-token"
-    assert "projects/winter-runway-506/locations/us-central1/publishers/google/models/" in model_name
-
 def test_gemini_bridge_api_key_details():
     bridge = GeminiLiveBridge(
         target_language="French",
         output_mode="audio",
-        token_or_key="AIzaSyTestApiKey12345",
-        project="winter-runway-506",
-        location="us-central1"
+        api_key="AIzaSyTestApiKey12345"
     )
     ws_url, headers, model_name = bridge.get_connection_details()
     
-    assert "us-central1-aiplatform.googleapis.com" in ws_url
+    assert "generativelanguage.googleapis.com" in ws_url
     assert "key=AIzaSyTestApiKey12345" in ws_url
     assert headers.get("x-goog-api-key") == "AIzaSyTestApiKey12345"
     assert "Authorization" not in headers
-    assert "projects/winter-runway-506/locations/us-central1/publishers/google/models/" in model_name
+    assert model_name.startswith("models/")
 
-def test_gemini_bridge_oauth_details():
+def test_gemini_bridge_custom_model_details():
     bridge = GeminiLiveBridge(
-        target_language="Spanish",
-        output_mode="text",
-        token_or_key="ya29.test-oauth-token",
-        project="winter-runway-506",
-        location="us-central1"
+        target_language="German",
+        output_mode="audio",
+        api_key="AIzaSyTestApiKey12345",
+        model="gemini-2.0-flash-exp"
     )
     ws_url, headers, model_name = bridge.get_connection_details()
     
-    assert "access_token=ya29.test-oauth-token" in ws_url
-    assert headers.get("Authorization") == "Bearer ya29.test-oauth-token"
-    assert "x-goog-api-key" not in headers
+    assert model_name == "models/gemini-2.0-flash-exp"
 
 def test_gemini_bridge_realtime_audio_chunk():
     bridge = GeminiLiveBridge(target_language="English", output_mode="audio")

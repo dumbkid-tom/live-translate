@@ -44,6 +44,12 @@ class AudioPlayer {
     this.nextStartTime = startTime + audioBuffer.duration;
   }
 
+  clear() {
+    if (this.audioCtx) {
+      this.nextStartTime = this.audioCtx.currentTime;
+    }
+  }
+
   stop() {
     if (this.audioCtx && this.audioCtx.state !== 'closed') {
       this.audioCtx.close();

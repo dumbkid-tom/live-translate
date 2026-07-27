@@ -13,8 +13,8 @@ class Settings:
             else:
                 load_dotenv(override=True)
 
-        self.default_model: str = os.getenv("DEFAULT_MODEL", "gemini-2.0-flash-exp")
-        self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+        self.default_model: str = os.getenv("DEFAULT_MODEL", "gemini-3.1-flash-live-preview")
+        self.gemini_api_key: str = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY", "")
         self.host: str = os.getenv("HOST", "0.0.0.0")
         self.port: int = int(os.getenv("PORT", "8000"))
 

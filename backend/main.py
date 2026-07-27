@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import logging
+import base64
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -9,7 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import websockets
 
 from backend.config import settings
-from backend.gemini_live import GeminiLiveBridge
+from backend.gemini_live import GeminiLiveBridge, HAS_GENAI_SDK
+if HAS_GENAI_SDK:
+    from google.genai import types
 
 logger = logging.getLogger("main")
 logging.basicConfig(level=logging.INFO)
@@ -39,20 +42,120 @@ async def health_check():
 async def websocket_translate(
     websocket: WebSocket,
     target_language: str = Query("English"),
-    mode: str = Query("audio"),
-    api_key: str = Query(None)
+    mode: str = Query("audio")
 ):
     await websocket.accept()
 
+    if not settings.gemini_api_key:
+        await websocket.send_json({
+            "type": "error",
+            "message": "GEMINI_API_KEY environment variable is not set."
+        })
+        await websocket.close(code=1008)
+        return
+
     bridge = GeminiLiveBridge(
         target_language=target_language,
-        output_mode=mode,
-        api_key=api_key
+        output_mode=mode
     )
+
+    if HAS_GENAI_SDK:
+        try:
+            client = bridge.get_genai_client()
+            config = bridge.build_live_connect_config()
+            model_name = bridge.model
+
+            logger.info("Connecting to Gemini Live API via google-genai SDK (model=%s)", model_name)
+            async with client.aio.live.connect(model=model_name, config=config) as session:
+                await websocket.send_json({
+                    "type": "connected",
+                    "target_language": target_language,
+                    "mode": mode,
+                    "model": model_name,
+                    "provider": "gemini_api"
+                })
+
+                async def client_to_gemini():
+                    try:
+                        while True:
+                            msg_text = await websocket.receive_text()
+                            msg = json.loads(msg_text)
+                            msg_type = msg.get("type")
+
+                            if msg_type == "audio_chunk" and "data" in msg:
+                                pcm_bytes = base64.b64decode(msg["data"])
+                                blob = types.Blob(data=pcm_bytes, mime_type="audio/pcm;rate=16000")
+                                await session.send_realtime_input(audio=blob)
+                            elif msg_type == "text" and "text" in msg:
+                                await session.send_realtime_input(text=msg["text"])
+                            elif msg_type == "stop":
+                                logger.info("Received stop request from client.")
+                                break
+                    except WebSocketDisconnect:
+                        logger.info("Client WebSocket disconnected.")
+                    except Exception as e:
+                        sanitized_err = str(e).split("?")[0]
+                        logger.error("Error reading client WS (%s): %s", type(e).__name__, sanitized_err)
+
+                async def gemini_to_client():
+                    try:
+                        while True:
+                            async for response in session.receive():
+                                server_content = response.server_content
+                                if server_content is None:
+                                    continue
+
+                                if server_content.interrupted:
+                                    await websocket.send_json({"type": "interrupted"})
+
+                                if server_content.model_turn:
+                                    for part in server_content.model_turn.parts:
+                                        if part.text:
+                                            await websocket.send_json({
+                                                "type": "text",
+                                                "text": part.text
+                                            })
+                                        if part.inline_data:
+                                            inline_data = part.inline_data
+                                            mime_type = inline_data.mime_type or ""
+                                            raw_data = inline_data.data
+                                            if isinstance(raw_data, bytes):
+                                                audio_b64 = base64.b64encode(raw_data).decode("utf-8")
+                                            else:
+                                                audio_b64 = str(raw_data)
+
+                                            if mime_type.startswith("audio/"):
+                                                await websocket.send_json({
+                                                    "type": "audio",
+                                                    "data": audio_b64,
+                                                    "mimeType": mime_type
+                                                })
+
+                                if server_content.output_transcription and server_content.output_transcription.text:
+                                    await websocket.send_json({
+                                        "type": "text",
+                                        "text": server_content.output_transcription.text
+                                    })
+
+                                if server_content.turn_complete:
+                                    await websocket.send_json({"type": "turn_complete"})
+
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as e:
+                        sanitized_err = str(e).split("?")[0]
+                        logger.error("Error reading Gemini API Session (%s): %s", type(e).__name__, sanitized_err)
+
+                await asyncio.gather(client_to_gemini(), gemini_to_client(), return_exceptions=True)
+                return
+
+        except Exception as sdk_err:
+            sanitized_err = str(sdk_err).split("?")[0]
+            logger.warning("SDK connect failed (%s): %s. Falling back to WSS.", type(sdk_err).__name__, sanitized_err)
 
     try:
         ws_url, headers, model_name = bridge.get_connection_details()
-        logger.info(f"Connecting to Gemini API WSS Endpoint: {ws_url}")
+        logger.info("Connecting to Gemini API WSS endpoint (model=%s)", model_name)
 
         connect_kwargs = {}
         if headers:
@@ -88,7 +191,8 @@ async def websocket_translate(
                 except WebSocketDisconnect:
                     logger.info("Client WebSocket disconnected.")
                 except Exception as e:
-                    logger.error(f"Error reading client WS: {e}")
+                    sanitized_err = str(e).split("?")[0]
+                    logger.error("Error reading client WS (%s): %s", type(e).__name__, sanitized_err)
 
             async def gemini_to_client():
                 try:
@@ -118,14 +222,24 @@ async def websocket_translate(
                             await websocket.send_json({"type": "turn_complete"})
 
                 except Exception as e:
-                    logger.error(f"Error reading Gemini API WSS: {e}")
+                    sanitized_err = str(e).split("?")[0]
+                    logger.error("Error reading Gemini API WSS (%s): %s", type(e).__name__, sanitized_err)
 
             await asyncio.gather(client_to_gemini(), gemini_to_client(), return_exceptions=True)
 
-    except Exception as e:
-        logger.error(f"WebSocket translation exception: {e}")
+    except ValueError as ve:
+        sanitized_err = str(ve).split("?")[0]
+        logger.error("API key validation error (%s): %s", type(ve).__name__, sanitized_err)
         try:
-            await websocket.send_json({"type": "error", "message": f"Connection error: {str(e)}"})
+            await websocket.send_json({"type": "error", "message": sanitized_err})
+            await websocket.close(code=1008)
+        except Exception:
+            pass
+    except Exception as e:
+        sanitized_err = str(e).split("?")[0]
+        logger.error("WebSocket translation exception (%s): %s", type(e).__name__, sanitized_err)
+        try:
+            await websocket.send_json({"type": "error", "message": f"Connection error: {sanitized_err}"})
             await websocket.close()
         except Exception:
             pass

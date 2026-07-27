@@ -147,6 +147,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (currentMode === 'audio' && audioPlayer) {
         audioPlayer.playChunk(msg.data);
       }
+    } else if (msg.type === 'interrupted') {
+      if (audioPlayer) {
+        audioPlayer.clear();
+      }
     } else if (msg.type === 'turn_complete') {
       finalizeCurrentTurn();
     } else if (msg.type === 'error') {

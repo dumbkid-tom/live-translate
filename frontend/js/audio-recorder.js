@@ -58,7 +58,11 @@ class AudioRecorder {
       };
 
       this.source.connect(this.processor);
-      this.processor.connect(this.audioContext.destination);
+      // Mute direct microphone feedback through speakers to prevent echo loops
+      const muteGain = this.audioContext.createGain();
+      muteGain.gain.value = 0;
+      this.processor.connect(muteGain);
+      muteGain.connect(this.audioContext.destination);
       this.isRecording = true;
       console.log("AudioRecorder started successfully. Input rate:", inputSampleRate);
     } catch (err) {

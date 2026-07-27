@@ -5,8 +5,6 @@ metadata:
   labels:
     app: live-translate
 data:
-  VERTEX_PROJECT: "winter-runway-506"
-  VERTEX_LOCATION: "us-central1"
-  DEFAULT_MODEL: "gemini-3.5-live-translate-preview"
+  DEFAULT_MODEL: "gemini-2.0-flash-exp"
   HOST: "0.0.0.0"
   PORT: "8000"

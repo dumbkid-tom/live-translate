@@ -1,12 +1,12 @@
-# 🌐 Vertex AI Live Translate Web Application
+# 🌐 Gemini Live Translate Web Application
 
-A low-latency, real-time speech and text translation web application powered by **GCP Vertex AI Gemini Live API** (`aiplatform.googleapis.com`) with GCP Project `winter-runway-506` and region `us-central1`.
+A low-latency, real-time speech and text translation web application powered by **Google Gemini Live API** (`generativelanguage.googleapis.com`).
 
 ---
 
 ## ✨ Key Features
 
-- **GCP Vertex AI Gemini Integration**: Uses `aiplatform.googleapis.com` with support for GCP API Key (`GEMINI_API_KEY`), OAuth 2.0 Bearer tokens, and GCP Application Default Credentials (ADC).
+- **Gemini Live API Integration**: Direct WebSocket streaming connection to `generativelanguage.googleapis.com` via `GEMINI_API_KEY`.
 - **Real-Time Speech-to-Speech & Speech-to-Text**: Stream microphone audio continuously with instant translated spoken audio and live transcript text.
 - **Dual Output Modes**:
   - 🔊 **Live Audio + Text**: Hear real-time target language audio output while following along with live translated text.
@@ -24,50 +24,57 @@ A low-latency, real-time speech and text translation web application powered by 
 [ Web Browser ] (Microphone 16kHz PCM) 
        │ 
        ▼ (WebSocket /ws/translate)
-[ FastAPI Proxy Server (GCP Auth Resolution) ] 
+[ FastAPI Proxy Server ] 
        │ 
        ▼ (Stateful WSS BidiGenerateContent)
-[ GCP Vertex AI (wss://us-central1-aiplatform.googleapis.com) ]
+[ Google Gemini API (wss://generativelanguage.googleapis.com) ]
 ```
 
 ---
 
-## 🔑 Authentication Options for Vertex AI
+## 🔑 Authentication & Configuration
 
-The application automatically manages authentication in three ways (checked in priority order):
+The application requires only a single environment variable:
 
-1. **GCP API Key (`GEMINI_API_KEY`)**:
-   Provide a GCP API Key with Vertex AI / Gemini API permissions.
-2. **OAuth 2.0 Access Token (`VERTEX_ACCESS_TOKEN`)**:
-   OAuth token from `gcloud auth print-access-token`.
-3. **Application Default Credentials (ADC) / Service Account Key**:
-   When `GOOGLE_APPLICATION_CREDENTIALS` is set or local ADC (`gcloud auth application-default login`) is used.
+- **`GEMINI_API_KEY`**: Your Google Gemini API key.
 
-Default Project: `winter-runway-506`  
-Default Location: `us-central1`
+Default Model: `gemini-2.0-flash-exp`
 
 ---
 
-## 🚀 Quickstart (Docker Compose)
+## 🚀 Quickstart
 
 ### 1. Configure `.env`
+Create or edit `.env`:
 ```env
-VERTEX_PROJECT=winter-runway-506
-VERTEX_LOCATION=us-central1
-GEMINI_API_KEY=your-gcp-api-key-here
+GEMINI_API_KEY=your-gemini-api-key-here
+DEFAULT_MODEL=gemini-2.0-flash-exp
 ```
 
-### 2. Start Application
+### 2. Start Application via Docker Compose
 ```bash
 docker compose up -d --build
 ```
 Access the application at `http://localhost:8000`.
 
+### 3. Or Run Locally with Python
+```bash
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
 ---
 
 ## ☸️ Deploying to Kubernetes
 
-Apply manifests:
+1. Create secret from example:
+```bash
+cp k8s/secret.example.yaml k8s/secret.yaml
+# Edit k8s/secret.yaml to add your GEMINI_API_KEY
+kubectl apply -f k8s/secret.yaml
+```
+
+2. Apply manifests:
 ```bash
 kubectl apply -f k8s/configmap.yaml
 kubectl apply -f k8s/deployment.yaml
@@ -76,10 +83,16 @@ kubectl apply -f k8s/service.yaml
 
 ---
 
-## 🧪 Running Tests
+## 🧪 Testing & Verification
 
+Run backend unit and route tests:
 ```bash
 ./venv/bin/pytest tests/ -v
+```
+
+Run live Gemini WebSocket handshake smoke test:
+```bash
+python scripts/smoke_gemini.py
 ```
 
 ---

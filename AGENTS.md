@@ -5,12 +5,14 @@ WebSocket) with short-lived ephemeral auth tokens.
 
 ## Runtime model
 
-- Transcribe/translate model: **`gemini-3.5-transcribe-live`**
-  - This is the successor to the deprecated `gemini-3.5-live-translate-preview`
-    (the old string was removed from the models API and is no longer listed).
-- `DEFAULT_MODEL` (`gemini-3.1-flash-live-preview`) is only used for the
-  non-simultaneous / turn-based fallback path; do not confuse it with the
-  translate model.
+- Transcribe/translate model: **`gemini-3.5-live-translate-preview`**
+  - Replaces the transcription-only `gemini-3.5-transcribe-live` (commit
+    `d151b93`). Unlike `-transcribe-live`, this model supports the AUDIO
+    response modality required by the simultaneous-translation path, and it
+    also handles the transcription path over a real WebSocket.
+  - `DEFAULT_MODEL` (`gemini-3.1-flash-live-preview`) is only used for the
+    non-simultaneous / turn-based fallback path; do not confuse it with the
+    translate model.
 - The model string is **not hardcoded** in the frontend — the browser reads
   `model` from the token setup payload returned by the backend. So changing
   the backend default is the only code change needed for a new model.

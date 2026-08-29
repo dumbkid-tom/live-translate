@@ -1,7 +1,7 @@
 # Design Document: Live Translate Web Application
 
 ## 1. Executive Summary
-The Live Translate Web Application is a real-time, low-latency speech-to-speech and speech-to-text translation platform powered by the **Gemini Multimodal Live API** (`gemini-3.5-transcribe-live`). The application enables users to speak into their microphone and receive live translated text or synthesized speech in near real-time.
+The Live Translate Web Application is a real-time, low-latency speech-to-speech and speech-to-text translation platform powered by the **Gemini Multimodal Live API** (`gemini-3.5-live-translate-preview`). The application enables users to speak into their microphone and receive live translated text or synthesized speech in near real-time.
 
 The application is packaged as a containerized solution (Docker & Kubernetes ready) with a high-performance Python FastAPI backend and a responsive modern web UI.
 
@@ -11,7 +11,7 @@ The application is packaged as a containerized solution (Docker & Kubernetes rea
 
 | Requirement | Description |
 | :--- | :--- |
-| **Model** | `gemini-3.5-transcribe-live` (with fallback configuration options for `gemini-2.0-flash-exp` / Live WSS endpoint). |
+| **Model** | `gemini-3.5-live-translate-preview` (with fallback configuration options for `gemini-2.0-flash-exp` / Live WSS endpoint). |
 | **Input** | Microhone audio stream (captured in browser, resampled to 16kHz 16-bit mono PCM). |
 | **Output Modes** | 1. **Audio to Text** (Spoken source -> Live target text translation).<br>2. **Audio to Audio** (Spoken source -> Live target spoken audio translation + transcript text). |
 | **Language Selection** | Configurable target languages (English, Chinese, Spanish, French, German, Japanese, Korean, Italian, Portuguese, Hindi, etc.). |
@@ -62,7 +62,7 @@ sequenceDiagram
 ## 4. Frontend Design & Aesthetics
 - **Theme**: Dark mode with neon accents (Cyan `#00f2fe`, Purple `#4facfe`, Glassmorphism `#121826`).
 - **Components**:
-  - **Header Bar**: Live status indicator (Connected / Listening / Idle / Error), Model tag `gemini-3.5-transcribe-live`.
+  - **Header Bar**: Live status indicator (Connected / Listening / Idle / Error), Model tag `gemini-3.5-live-translate-preview`.
   - **Configuration Controls**: Target Language selection dropdown, Output Mode toggle (Audio + Text vs Text Only).
   - **Audio Equalizer Visualizer**: Dynamic HTML5 Canvas canvas showing mic input waveforms during speech.
   - **Live Transcript Panel**: Auto-scrolling stream with timestamped speaker cards, highlighting translated output.

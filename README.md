@@ -191,13 +191,17 @@ The token endpoint accepts:
 | `translation_mode` | `simultaneous` or `turn_based` |
 | `silence_duration_ms` | Fallback VAD setting; effective range 500–2000 ms |
 | `echo_target_language` | Provider translation option for repeated target audio |
+| `transcription_mode` | `verbatim` or `smart` (Live Transcribe speech-to-text) |
+| `language_codes` | Optional BCP-47 codes (e.g. `["es-ES"]`); `[]` auto-detects |
+| `custom_vocabulary` | Optional list of terms to bias recognition |
+| `vad_disabled` | When true, disables automatic VAD (manual push-to-talk) |
 
 For simultaneous mode, the setup sent after WebSocket open is structurally:
 
 ```json
 {
   "setup": {
-    "model": "models/gemini-3.5-transcribe-live",
+    "model": "models/gemini-3.5-live-translate-preview",
     "generationConfig": {
       "responseModalities": ["AUDIO"],
       "translationConfig": {
@@ -229,6 +233,40 @@ voice `Puck`, an interpreter `systemInstruction`,
 `realtimeInputConfig.automaticActivityDetection`, and both transcription
 configs. It sets `activityHandling` to `NO_INTERRUPTION`, high end-of-speech
 sensitivity, 300 ms prefix padding, and the clamped silence duration.
+
+### Live Transcribe (speech-to-text)
+
+`translation_mode=transcribe` implements the [Gemini Live Transcribe API](https://ai.google.dev/gemini-api/docs/live-api/live-transcribe):
+a dedicated speech-to-text pipeline that streams text transcriptions
+(`response_modalities=["TEXT"]`) instead of spoken audio. It uses
+`gemini-3.5-live-translate-preview` (override with `TRANSCRIPTION_MODEL`) and connects
+over the transcribe live WebSocket (the `v1beta` generative-language endpoint,
+override with `TRANSCRIBE_WS_VERSION`).
+
+```json
+{
+  "setup": {
+    "model": "models/gemini-3.5-live-translate-preview",
+    "generationConfig": {
+      "responseModalities": ["TEXT"]
+    },
+    "inputAudioTranscription": {
+      "languageCodes": [],
+      "customVocabulary": ["Gemini", "Kubernetes"],
+      "mode": "smart"
+    },
+    "outputAudioTranscription": {}
+  }
+}
+```
+
+`inputAudioTranscription` carries the language hint (empty `languageCodes`
+triggers automatic language detection), an optional `customVocabulary`, and a
+`mode` of `verbatim` (default, raw transcript) or `smart` (cleaned, formatted).
+With `vad_disabled=true` the server sends
+`realtimeInputConfig.automaticActivityDetection.disabled=true` for manual
+push-to-talk turn boundaries. The server emits `input_transcription` (finalized)
+and `interim_input_transcription` (low-latency partial) text fields.
 
 The backend creates tokens with `client.auth_tokens.create` using:
 
@@ -368,7 +406,7 @@ setupComplete, and then streams audio directly to Gemini.
 
 Create this structure:
   backend/config.py: load .env; defaults DEFAULT_MODEL=gemini-3.1-flash-live-preview,
-    TRANSLATE_MODEL=gemini-3.5-transcribe-live,
+    TRANSLATE_MODEL=gemini-3.5-live-translate-preview,
     TRANSLATION_MODE=simultaneous, HOST=0.0.0.0, PORT=8000; token uses=1,
     TTL=30 minutes, new-session TTL=5 minutes, locked constraints=true,
     origins=*, rate limit=10/IP/minute. Accept GOOGLE_API_KEY then GEMINI_API_KEY.
@@ -406,7 +444,7 @@ SIMULTANEOUS SETUP
 For translation_mode=simultaneous use the translate model and send:
 {
   "setup": {
-    "model": "models/gemini-3.5-transcribe-live",
+    "model": "models/gemini-3.5-live-translate-preview",
     "generationConfig": {
       "responseModalities": ["AUDIO"],
       "translationConfig": {"targetLanguageCode": "es",

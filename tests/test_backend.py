@@ -52,7 +52,7 @@ def test_build_live_session_config():
     # Simultaneous mode (default)
     cfg = build_live_session_config("French", translation_mode="simultaneous")
     setup = cfg["setup"]
-    assert setup["model"] == "models/gemini-3.5-transcribe-live"
+    assert setup["model"] == "models/gemini-3.5-live-translate-preview"
     assert setup["generationConfig"]["responseModalities"] == ["AUDIO"]
     assert setup["generationConfig"]["translationConfig"]["targetLanguageCode"] == "fr"
     assert "realtimeInputConfig" not in setup
@@ -87,7 +87,7 @@ def test_token_service_create_mocked(monkeypatch):
         result = service.create("German", "audio", translation_mode="simultaneous")
         assert result["token"] == "auth_tokens/mock_123456"
         assert "access_token=auth_tokens/mock_123456" in result["ws_endpoint"]
-        assert result["model"] == "models/gemini-3.5-transcribe-live"
+        assert result["model"] == "models/gemini-3.5-live-translate-preview"
         assert result["translation_mode"] == "simultaneous"
         assert result["target_language_code"] == "de"
 
@@ -184,7 +184,7 @@ def test_token_service_locks_constraints_structure(monkeypatch):
         # Check live_connect_constraints in CreateAuthTokenConfig
         constraints = config_arg.live_connect_constraints
         assert constraints is not None
-        assert constraints.model == "models/gemini-3.5-transcribe-live"
+        assert constraints.model == "models/gemini-3.5-live-translate-preview"
         assert constraints.config.translation_config.target_language_code == "de"
         assert constraints.config.translation_config.echo_target_language is True
 

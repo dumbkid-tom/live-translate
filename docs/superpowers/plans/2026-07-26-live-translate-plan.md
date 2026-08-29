@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a complete, containerized Live Translate web application powered by the Gemini Multimodal Live API (`gemini-3.5-transcribe-live`) with real-time speech/text translation, dual output modes (Audio-to-Audio and Audio-to-Text), real-time transcripts, export capability, Docker Compose support, and Kubernetes manifests.
+**Goal:** Build a complete, containerized Live Translate web application powered by the Gemini Multimodal Live API (`gemini-3.5-live-translate-preview`) with real-time speech/text translation, dual output modes (Audio-to-Audio and Audio-to-Text), real-time transcripts, export capability, Docker Compose support, and Kubernetes manifests.
 
 **Architecture:** A FastAPI backend acts as a low-latency stateful WebSocket proxy between browser audio clients and the Gemini Multimodal Live API (`wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`). The browser captures mic audio via Web Audio API, resamples to 16kHz 16-bit PCM, and streams to FastAPI, which forwards to Gemini. Gemini returns translated text/audio frames, which FastAPI streams back to the browser for real-time visual UI rendering and audio playback.
 
@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Python version floor: Python 3.12
-- Gemini Live Model ID: `gemini-3.5-transcribe-live` (with fallback support for `gemini-2.0-flash-exp`)
+- Gemini Live Model ID: `gemini-3.5-live-translate-preview` (with fallback support for `gemini-2.0-flash-exp`)
 - Gemini API Key passed via environment variable `GEMINI_API_KEY`
 - Audio format: 16kHz, 16-bit mono PCM stream
 - No authentication required
@@ -52,7 +52,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    default_model: str = os.getenv("DEFAULT_MODEL", "gemini-3.5-transcribe-live")
+    default_model: str = os.getenv("DEFAULT_MODEL", "gemini-3.5-live-translate-preview")
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8000"))
     ws_endpoint: str = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
@@ -71,7 +71,7 @@ sys.path.insert(0, os.path.abspath("."))
 from backend.config import settings
 
 def test_settings_default():
-    assert settings.default_model == "gemini-3.5-transcribe-live"
+    assert settings.default_model == "gemini-3.5-live-translate-preview"
     assert settings.port == 8000
 ```
 

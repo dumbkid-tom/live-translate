@@ -197,7 +197,7 @@ For simultaneous mode, the setup sent after WebSocket open is structurally:
 ```json
 {
   "setup": {
-    "model": "models/gemini-3.5-live-translate-preview",
+    "model": "models/gemini-3.5-transcribe-live",
     "generationConfig": {
       "responseModalities": ["AUDIO"],
       "translationConfig": {
@@ -368,7 +368,7 @@ setupComplete, and then streams audio directly to Gemini.
 
 Create this structure:
   backend/config.py: load .env; defaults DEFAULT_MODEL=gemini-3.1-flash-live-preview,
-    TRANSLATE_MODEL=gemini-3.5-live-translate-preview,
+    TRANSLATE_MODEL=gemini-3.5-transcribe-live,
     TRANSLATION_MODE=simultaneous, HOST=0.0.0.0, PORT=8000; token uses=1,
     TTL=30 minutes, new-session TTL=5 minutes, locked constraints=true,
     origins=*, rate limit=10/IP/minute. Accept GOOGLE_API_KEY then GEMINI_API_KEY.
@@ -406,7 +406,7 @@ SIMULTANEOUS SETUP
 For translation_mode=simultaneous use the translate model and send:
 {
   "setup": {
-    "model": "models/gemini-3.5-live-translate-preview",
+    "model": "models/gemini-3.5-transcribe-live",
     "generationConfig": {
       "responseModalities": ["AUDIO"],
       "translationConfig": {"targetLanguageCode": "es",

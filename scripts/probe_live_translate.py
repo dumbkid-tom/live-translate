@@ -32,7 +32,7 @@ async def probe_live_translate():
             http_options=types.HttpOptions(api_version="v1alpha")
         )
 
-        model_name = getattr(settings, "translate_model", "gemini-3.5-live-translate-preview")
+        model_name = getattr(settings, "translate_model", "gemini-3.5-transcribe-live")
         if not model_name.startswith("models/"):
             model_name = f"models/{model_name}"
 

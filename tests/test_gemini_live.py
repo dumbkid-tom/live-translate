@@ -20,7 +20,7 @@ def test_build_interpreter_prompt_variations():
 def test_build_translation_setup():
     setup_data = build_translation_setup("Spanish", echo_target_language=True)
     setup = setup_data["setup"]
-    assert setup["model"] == "models/gemini-3.5-live-translate-preview"
+    assert setup["model"] == "models/gemini-3.5-transcribe-live"
     assert setup["generationConfig"]["responseModalities"] == ["AUDIO"]
     assert setup["generationConfig"]["translationConfig"]["targetLanguageCode"] == "es"
     assert setup["generationConfig"]["translationConfig"]["echoTargetLanguage"] is True
@@ -53,6 +53,6 @@ def test_token_service_create(monkeypatch):
 
         assert resp["token"] == "auth_tokens/test_token_999"
         assert "access_token=auth_tokens/test_token_999" in resp["ws_endpoint"]
-        assert resp["setup"]["model"] == "models/gemini-3.5-live-translate-preview"
+        assert resp["setup"]["model"] == "models/gemini-3.5-transcribe-live"
         assert resp["translation_mode"] == "simultaneous"
         assert resp["target_language_code"] == "it"

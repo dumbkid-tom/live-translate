@@ -8,7 +8,7 @@ from backend.config import Settings, settings
 
 def test_settings_default():
     assert settings.default_model == "gemini-3.1-flash-live-preview"
-    assert settings.translate_model == "gemini-3.5-live-translate-preview"
+    assert settings.translate_model == "gemini-3.5-transcribe-live"
     assert settings.translation_mode == "simultaneous"
     assert settings.port == 8000
     assert "generativelanguage.googleapis.com" in settings.get_generative_language_ws_endpoint()

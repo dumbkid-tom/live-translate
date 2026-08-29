@@ -86,7 +86,7 @@ class Settings:
             else:
                 load_dotenv(override=True)
 
-        self.default_model: str = os.getenv("DEFAULT_MODEL", "gemini-3.5-live-translate-preview")
+        self.default_model: str = os.getenv("DEFAULT_MODEL", "gemini-3.5-transcribe-live")
         self.vertex_project: str = os.getenv("VERTEX_PROJECT", os.getenv("GOOGLE_CLOUD_PROJECT", "winter-runway-506"))
         self.vertex_location: str = os.getenv("VERTEX_LOCATION", "us-central1")
         self.google_application_credentials: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
@@ -277,7 +277,7 @@ def test_health_check_endpoint():
     data = response.json()
     assert data["status"] == "healthy"
     assert data["provider"] == "vertex_ai"
-    assert data["model"] == "gemini-3.5-live-translate-preview"
+    assert data["model"] == "gemini-3.5-transcribe-live"
     assert data["vertex_project"] == "winter-runway-506"
     assert data["vertex_location"] == "us-central1"
     assert "has_credentials" in data
@@ -323,7 +323,7 @@ GOOGLE_APPLICATION_CREDENTIALS=
 VERTEX_ACCESS_TOKEN=
 
 # Model & Server Settings
-DEFAULT_MODEL=gemini-3.5-live-translate-preview
+DEFAULT_MODEL=gemini-3.5-transcribe-live
 HOST=0.0.0.0
 PORT=8000
 ```

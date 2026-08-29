@@ -14,7 +14,7 @@ class Settings:
                 load_dotenv(override=False)
 
         self.default_model: str = os.getenv("DEFAULT_MODEL", "gemini-3.1-flash-live-preview")
-        self.translate_model: str = os.getenv("TRANSLATE_MODEL", "gemini-3.5-live-translate-preview")
+        self.translate_model: str = os.getenv("TRANSLATE_MODEL", "gemini-3.5-transcribe-live")
         self.translation_mode: str = os.getenv("TRANSLATION_MODE", "simultaneous").lower()
         if self.translation_mode not in ("simultaneous", "turn_based"):
             self.translation_mode = "simultaneous"

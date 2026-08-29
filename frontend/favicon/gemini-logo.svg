@@ -1,0 +1,21 @@
+<!-- Gemini Live Translate favicon source; rendered to PNG/ICO by scripts/make_favicon.py -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="gemini-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00F2FE"/>
+      <stop offset="1" stop-color="#4FACFE"/>
+    </linearGradient>
+  </defs>
+  <!-- Gemini brand mark: a rounded gem / faceted diamond -->
+  <path d="M64 6
+           C64 6 26 22 16 60
+           C6 98 64 122 64 122
+           C64 122 122 98 112 60
+           C102 22 64 6 64 6 Z"
+        fill="url(#gemini-grad)"/>
+  <!-- inner facet highlight -->
+  <path d="M44 40 L64 26 L84 40 L64 102 Z"
+        fill="#ffffff" opacity="0.18"/>
+  <path d="M64 26 L64 102 L44 40 Z"
+        fill="#ffffff" opacity="0.10"/>
+</svg>

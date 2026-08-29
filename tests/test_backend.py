@@ -27,6 +27,13 @@ def test_index_route():
     response = client.get("/")
     assert response.status_code == 200
 
+
+def test_favicon_ico_serves_png():
+    response = client.get("/favicon.ico")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/x-icon"
+    assert response.content[:4] == b"\x89PNG"
+
 def test_build_interpreter_prompt():
     prompt = build_interpreter_prompt("Spanish", "English")
     assert "Spanish" in prompt

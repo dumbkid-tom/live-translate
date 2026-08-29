@@ -47,7 +47,20 @@ print(r['model'], r['setup']['model'], r['token'][:24])
 "
 ```
 
+## Favicon
+- `frontend/favicon/gemini-logo.svg` is the source asset (Gemini-brand rounded-
+gem mark, cyan→blue gradient, matching the header logo).
+- `scripts/make_favicon.py` renders the SVG to `favicon.ico` (32x32) and
+  `favicon-{32,128}.png` via `cairosvg`. Run it after editing the SVG:
+  ```bash
+  python3 scripts/make_favicon.py
+  ```
+- `backend/main.py` serves a dedicated `/favicon.ico` route from
+  `frontend/favicon/` (PNG first, SVG fallback), so the browser no longer
+  hits a 404 and fetches the wrong/default icon. `index.html` links it
+  explicitly (`<link rel="icon" href="/favicon.ico">`). No runtime
+  dependency on `cairosvg` — it is only a build-time tool.
 ## Tests
 
-- Python: `python3 -m pytest tests/` (18 tests; all passing once SDK fixed).
+- Python: `python3 -m pytest tests/` (19 tests; all passing once SDK fixed). The `test_transcription.py` file errors on collection because the installed `google-genai` lacks `AudioTranscriptionConfigMode` — that is a pre-existing SDK-version mismatch, not a failing test.
 - JS: `tests/js/protocol.test.js` — needs `npm install`/`jest` to run.

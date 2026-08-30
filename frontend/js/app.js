@@ -22,6 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const echoTargetGroup = document.getElementById('echo-target-group');
   const echoTargetCheckbox = document.getElementById('echo-target-checkbox');
   const vadSilenceGroup = document.getElementById('vad-silence-group');
+  const transcribeGroup = document.getElementById('transcribe-group');
+  const transcriptionModeSelect = document.getElementById('transcription-mode-select');
+  const languageCodesInput = document.getElementById('language-codes-input');
+  const customVocabInput = document.getElementById('custom-vocab-input');
+  const vadDisabledCheckbox = document.getElementById('vad-disabled-checkbox');
 
   const sourceTranscriptContainer = document.getElementById('source-transcript-container');
   const sourceEmptyState = document.getElementById('source-empty-state');
@@ -59,8 +64,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mode === 'simultaneous') {
       if (vadSilenceGroup) vadSilenceGroup.style.display = 'none';
       if (echoTargetGroup) echoTargetGroup.style.display = 'block';
+      if (transcribeGroup) transcribeGroup.style.display = 'none';
     } else {
       if (vadSilenceGroup) vadSilenceGroup.style.display = 'block';
+      if (echoTargetGroup) echoTargetGroup.style.display = 'none';
+      if (transcribeGroup) transcribeGroup.style.display = 'none';
+    }
+    if (mode === 'transcribe') {
+      if (transcribeGroup) transcribeGroup.style.display = 'block';
+      if (vadSilenceGroup) vadSilenceGroup.style.display = 'none';
       if (echoTargetGroup) echoTargetGroup.style.display = 'none';
     }
   }
@@ -68,6 +80,22 @@ document.addEventListener('DOMContentLoaded', () => {
   if (translationModeSelect) {
     translationModeSelect.addEventListener('change', updateEngineModeUI);
     updateEngineModeUI();
+  }
+
+  // Transcription-specific controls
+  if (transcriptionModeSelect) {
+    transcriptionModeSelect.addEventListener('change', () => {
+      if (transcriptionModeSelect.value === 'smart') {
+        if (vadDisabledCheckbox) vadDisabledCheckbox.checked = false;
+      }
+    });
+  }
+  if (languageCodesInput) {
+    languageCodesInput.addEventListener('input', () => {
+      if (languageCodesInput.value.trim()) {
+        if (vadDisabledCheckbox) vadDisabledCheckbox.checked = false;
+      }
+    });
   }
 
   // Populate Microphones
@@ -159,7 +187,11 @@ document.addEventListener('DOMContentLoaded', () => {
           source_language: sourceLang,
           translation_mode: trMode,
           echo_target_language: echoTarget,
-          silence_duration_ms: silenceDuration
+          silence_duration_ms: silenceDuration,
+          transcription_mode: trMode === 'transcribe' ? 'verbatim' : undefined,
+          language_codes: trMode === 'transcribe' ? (languageCodesInput ? languageCodesInput.value.split(',').filter(Boolean) : undefined) : undefined,
+          custom_vocabulary: trMode === 'transcribe' && customVocabInput ? customVocabInput.value.split(',').filter(Boolean) : undefined,
+          vad_disabled: trMode === 'transcribe' && vadDisabledCheckbox ? vadDisabledCheckbox.checked : false
         })
       });
 
@@ -213,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       isRunning = true;
       updateUIForRunningState(true);
-      updateStatus('live', activeTranslationMode === 'simultaneous' ? 'Live Translate' : 'Turn-based Translate');
+      updateStatus('live', activeTranslationMode === 'simultaneous' ? 'Live Translate' : activeTranslationMode === 'turn_based' ? 'Turn-based Translate' : 'Transcribe (speech-to-text)');
     } catch (err) {
       console.error("Failed to start translation:", err);
       alert(`Error starting translation: ${err.message}`);

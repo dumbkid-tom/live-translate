@@ -117,6 +117,49 @@ def build_translation_setup(
         }
     }
 
+def build_transcription_setup(
+    source_language: str = None,
+    model: str = None,
+    transcription_mode: str = "verbatim",
+    language_codes: list[str] = None,
+    custom_vocabulary: list[str] = None,
+    vad_disabled: bool = False,
+) -> dict:
+    """Build a Live Transcribe (speech-to-text) setup payload.
+
+    Mirrors the documented Live Transcribe API
+    (https://ai.google.dev/gemini-api/docs/live-api/live-transcribe):
+    streaming ``response_modalities=["TEXT"]`` with ``input_audio_transcription``
+    carrying language hints, an optional custom vocabulary, and a transcription
+    ``mode`` (``verbatim`` or ``smart``).
+    """
+    target_model = model or settings.transcribe_model
+    if not target_model.startswith("models/"):
+        target_model = f"models/{target_model}"
+
+    language_codes = list(language_codes) if language_codes else []
+    custom_vocabulary = list(custom_vocabulary) if custom_vocabulary else []
+
+    # An empty languageCodes list signals automatic language detection to the
+    # model, so no special-casing is needed here.
+    input_transcription = {
+        "languageCodes": language_codes,
+        "customVocabulary": custom_vocabulary,
+        "mode": transcription_mode,
+    }
+
+    return {
+        "setup": {
+            "model": target_model,
+            "generationConfig": {
+                "responseModalities": ["TEXT"],
+            },
+            "inputAudioTranscription": input_transcription,
+            "outputAudioTranscription": {},
+        }
+    }
+
+
 def build_live_session_config(
     target_language: str = "English",
     mode: str = "audio",
@@ -124,7 +167,11 @@ def build_live_session_config(
     source_language: str = None,
     silence_duration_ms: int = 300,
     translation_mode: str = None,
-    echo_target_language: bool = False
+    echo_target_language: bool = False,
+    transcription_mode: str = "verbatim",
+    language_codes: list[str] = None,
+    custom_vocabulary: list[str] = None,
+    vad_disabled: bool = False
 ) -> dict:
     tr_mode = translation_mode or settings.translation_mode
     if tr_mode == "simultaneous":
@@ -133,6 +180,16 @@ def build_live_session_config(
             target_language=target_language,
             model=target_model,
             echo_target_language=echo_target_language
+        )
+
+    if tr_mode == "transcribe":
+        return build_transcription_setup(
+            source_language=source_language,
+            model=model,
+            transcription_mode=transcription_mode,
+            language_codes=language_codes,
+            custom_vocabulary=custom_vocabulary,
+            vad_disabled=vad_disabled
         )
 
     target_model = model or settings.default_model
@@ -187,7 +244,11 @@ class TokenService:
         source_language: str = None,
         silence_duration_ms: int = 300,
         translation_mode: str = None,
-        echo_target_language: bool = False
+        echo_target_language: bool = False,
+        transcription_mode: str = "verbatim",
+        language_codes: list[str] = None,
+        custom_vocabulary: list[str] = None,
+        vad_disabled: bool = False
     ) -> dict:
         if not HAS_GENAI_SDK:
             raise ImportError("google-genai SDK is not installed.")
@@ -222,6 +283,35 @@ class TokenService:
                 input_audio_transcription=types.AudioTranscriptionConfig(),
                 output_audio_transcription=types.AudioTranscriptionConfig()
             )
+        elif tr_mode == "transcribe":
+            target_model = model or settings.transcribe_model
+            if not target_model.startswith("models/"):
+                target_model = f"models/{target_model}"
+
+            setup_wrapper = build_transcription_setup(
+                source_language=source_language,
+                model=target_model,
+                transcription_mode=transcription_mode,
+                language_codes=language_codes,
+                custom_vocabulary=custom_vocabulary,
+                vad_disabled=vad_disabled
+            )
+
+            # Live Transcribe streams text transcriptions, not spoken audio.
+            live_config = types.LiveConnectConfig(
+                response_modalities=["TEXT"],
+                input_audio_transcription=types.AudioTranscriptionConfig(
+                    language_codes=language_codes or [],
+                    custom_vocabulary=custom_vocabulary or [],
+                    mode=transcription_mode
+                ),
+                output_audio_transcription=types.AudioTranscriptionConfig(),
+            )
+            # Optional push-to-talk: disable server-side automatic VAD entirely.
+            if vad_disabled:
+                live_config.realtime_input_config = types.RealtimeInputConfig(
+                    automatic_activity_detection=types.AutomaticActivityDetection(disabled=True)
+                )
         else:
             target_model = model or settings.default_model
             if not target_model.startswith("models/"):
@@ -285,7 +375,13 @@ class TokenService:
             config=types.CreateAuthTokenConfig(**config_kwargs)
         )
 
-        ws_endpoint = f"{settings.get_live_ws_endpoint()}?access_token={token_obj.name}"
+        # Transcribe (speech-to-text) sessions connect over the transcribe live
+        # WebSocket; translation and turn-based agent sessions use the constrained
+        # endpoint.
+        if tr_mode == "transcribe":
+            ws_endpoint = f"{settings.get_transcribe_ws_endpoint()}?access_token={token_obj.name}"
+        else:
+            ws_endpoint = f"{settings.get_live_ws_endpoint()}?access_token={token_obj.name}"
 
         return {
             "token": token_obj.name,
@@ -294,5 +390,6 @@ class TokenService:
             "ws_endpoint": ws_endpoint,
             "setup": setup_wrapper["setup"],
             "translation_mode": tr_mode,
+            "transcription_mode": tr_mode if tr_mode == "transcribe" else None,
             "target_language_code": target_code
         }

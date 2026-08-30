@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gemini Live Translate — Ephemeral Full-Duplex Translation</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="32x32">
   <meta name="description" content="Low-latency real-time full-duplex speech and text translation powered by Google Gemini Live API.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,6 +38,7 @@
         </div>
         <div>
           <h1>Gemini Live Translate</h1>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="32x32">
           <span class="badge model-badge">Direct Ephemeral WS</span>
         </div>
       </div>
@@ -64,6 +66,7 @@
               <select id="translation-mode-select" class="custom-select">
                 <option value="simultaneous" selected>Simultaneous (live-translate)</option>
                 <option value="turn_based">Turn-based (legacy)</option>
+                <option value="transcribe">Transcribe (speech-to-text)</option>
               </select>
             </div>
           </div>
@@ -164,6 +167,31 @@
                   <span id="silence-val" class="slider-value">600ms</span>
                 </div>
                 <input type="range" id="silence-slider" class="custom-slider" min="500" max="2000" step="50" value="600">
+              </div>
+
+              <!-- Live Transcribe (speech-to-text) settings -->
+              <div class="control-group" id="transcribe-group" style="display: none;">
+                <label for="transcription-mode-select">Transcription Mode</label>
+                <div class="select-wrapper">
+                  <select id="transcription-mode-select" class="custom-select">
+                    <option value="verbatim" selected>Verbatim</option>
+                    <option value="smart">Smart (cleaned &amp; formatted)</option>
+                  </select>
+                </div>
+                <label for="language-codes-input">Language Codes (BCP-47, comma-separated)</label>
+                <div class="select-wrapper">
+                  <input type="text" id="language-codes-input" class="custom-input" placeholder="[] auto-detect or e.g. es-ES, fr-FR" value="">
+                </div>
+                <label for="custom-vocab-input">Custom Vocabulary (comma-separated)</label>
+                <div class="select-wrapper">
+                  <textarea id="custom-vocab-input" class="custom-input" rows="2" placeholder="Gemini, Kubernetes, BigQuery"></textarea>
+                </div>
+                <div class="checkbox-group">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="vad-disabled-checkbox">
+                    <span>Disable automatic VAD (manual push-to-talk)</span>
+                  </label>
+                </div>
               </div>
             </div>
           </details>

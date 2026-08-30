@@ -3,4 +3,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .env
+.env.swp
 .DS_Store
+.opencode/

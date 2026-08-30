@@ -12,12 +12,12 @@ model or deployment does not support `translationConfig`.
 
 ---
 
-## How it looks
+## What it looks like
 
-The interface captures microphone audio, streams it directly to Gemini over a
-WebSocket, and returns the translated audio plus a live text transcript. Select
-the engine, target language, and output mode below, then press **Start
-Translation** to begin.
+A dark, centered panel with the translation engine, source/target language
+pickers, output mode toggle, and expandable audio-hardware settings. Select your
+options, then press **Start Translation** — the dual transcript below fills in
+with the original speech and its live translation as you talk.
 
 ![Gemini Live Translate UI](screenshots/app.png)
 

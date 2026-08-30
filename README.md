@@ -12,6 +12,17 @@ model or deployment does not support `translationConfig`.
 
 ---
 
+## How it looks
+
+The interface captures microphone audio, streams it directly to Gemini over a
+WebSocket, and returns the translated audio plus a live text transcript. Select
+the engine, target language, and output mode below, then press **Start
+Translation** to begin.
+
+![Gemini Live Translate UI](screenshots/app.png)
+
+---
+
 ## Quick start
 
 1. Copy `.env.example` to `.env` and set `GEMINI_API_KEY` (or `GOOGLE_API_KEY`).

@@ -5,4 +5,5 @@ __pycache__/
 .env
 .env.swp
 .DS_Store
+docs/superpowers/
 .opencode/

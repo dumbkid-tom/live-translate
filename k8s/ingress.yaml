@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: live-translate-ingress
+  labels:
+    app: live-translate
+  annotations:
+    # Redirect all HTTP traffic to HTTPS. This works with the widely used
+    # nginx ingress controller (and many others) without extra wiring.
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Nginx Ingress strips Host headers before matching against
+    # allow_origins, so a wildcard entry is required to capture every domain.
+    nginx.ingress.kubernetes.io/allow-regex: "^(.*)$"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - live-translate.example.com
+      secretName: live-translate-tls
+  rules:
+    - host: live-translate.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: live-translate-service
+                port:
+                  number: 8000

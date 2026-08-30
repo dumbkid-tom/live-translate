@@ -40,13 +40,50 @@ with the original speech and its live translation as you talk.
    engine/languages/output mode, and press **Start Translation**. Use
    headphones for full-duplex audio to prevent speaker bleed and feedback.
 
-Docker Compose runs the same stack:
+  Docker Compose runs the same stack:
 
 ```bash
 docker compose up --build
 ```
 
 Open <http://localhost:8000> after the container is healthy.
+
+---
+
+## Deployment (Kubernetes)
+
+The same FastAPI + frontend stack runs on Kubernetes. Apply the manifests in
+`k8s/` in this order:
+
+```bash
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/secret.example.yaml   # create the GEMINI_API_KEY secret
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+# HTTPS: install an ingress controller first, then provide a TLS secret.
+kubectl apply -f k8s/ingress-controller.yaml   # replace placeholder with your release
+kubectl apply -f k8s/tls-secret.example.yaml   # replace with a real cert
+kubectl apply -f k8s/ingress.yaml
+```
+
+### HTTPS and allowed origins
+
+Traffic is terminated at the `live-translate-ingress`, which redirects HTTP to
+HTTPS (`ssl-redirect: "true"`) and serves the certificate from
+`live-translate-tls`. The frontend and `/api/token` are then reachable at
+`https://live-translate.example.com`.
+
+`ALLOWED_ORIGINS` (ConfigMap → `env` → CORS) controls which browsers may call
+the API and load the UI:
+
+* During local development keep it at `*` (see `k8s/configmap.yaml`).
+* Before exposing the service publicly, set it to the exact `https://` host(s)
+  you are serving, e.g. `https://app.example.com`, and **remove the wildcard**
+  so `allow_credentials` stays disabled in CORS.
+
+```bash
+kubectl set env configmap/live-translate-config ALLOWED_ORIGINS="https://app.example.com"
+```
 
 ---
 

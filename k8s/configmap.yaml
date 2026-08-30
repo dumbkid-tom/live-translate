@@ -8,3 +8,8 @@ data:
   DEFAULT_MODEL: "gemini-3.1-flash-live-preview"
   HOST: "0.0.0.0"
   PORT: "8000"
+  # Comma-separated list of origins allowed to call the API and load the
+  # frontend. "*" allows any origin (handy for local dev); tighten this to
+  # explicit https:// hostnames once the service is publicly reachable, and
+  # remove the wildcard so allow_credentials stays disabled in CORS.
+  ALLOWED_ORIGINS: "*"

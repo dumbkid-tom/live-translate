@@ -1,0 +1,48 @@
+# Reference manifests for the nginx ingress controller.
+#
+# These are provided as ready-to-deploy templates. Adjust the release name and
+# values to match your cluster. The ingress in `ingress.yaml` requires this
+# controller to be installed and selected as the default ingress class.
+#
+# Install the controller (example: nginx-ingress-controller v1.12.0).
+#   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/k8s/manifests.yaml
+#
+# Replace the two placeholder manifests below with the actual installed release
+# before applying. They are documentation/examples only and must NOT be applied
+# verbatim into a cluster.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-nginx
+
+---
+# Placeholder: replace with your installed ingress-controller release.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingress-nginx-controller
+  template:
+    metadata:
+      labels:
+        app: ingress-nginx-controller
+    spec:
+      containers:
+        - name: controller
+          image: registry.k8s.io/ingress-nginx/controller:v1.12.0@sha256:059227a1104e55b1e088e0ea45314429c91c209e0cabec5a2b745796c662de5d
+          args:
+            - --enable-ssl-passthrough
+            - --publish-service=ingress-nginx/ingress-nginx-lb
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP

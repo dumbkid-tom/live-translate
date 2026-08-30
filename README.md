@@ -12,6 +12,17 @@ model or deployment does not support `translationConfig`.
 
 ---
 
+## What it looks like
+
+A dark, centered panel with the translation engine, source/target language
+pickers, output mode toggle, and expandable audio-hardware settings. Select your
+options, then press **Start Translation** — the dual transcript below fills in
+with the original speech and its live translation as you talk.
+
+![Gemini Live Translate UI](screenshots/app.png)
+
+---
+
 ## Quick start
 
 1. Copy `.env.example` to `.env` and set `GEMINI_API_KEY` (or `GOOGLE_API_KEY`).
